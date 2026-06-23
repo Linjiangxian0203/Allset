@@ -21,7 +21,12 @@ from torch.nn import Linear
 from torch.nn import Parameter
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import softmax
-from torch_scatter import scatter_add, scatter
+try:
+    from torch_scatter import scatter_add, scatter
+except (ImportError, OSError):
+    from torch_geometric.utils import scatter
+    def scatter_add(src, index, dim=0, dim_size=None):
+        return scatter(src, index, dim=dim, dim_size=dim_size, reduce='sum')
 from torch_geometric.typing import Adj, Size, OptTensor
 from typing import Optional
 
@@ -143,7 +148,7 @@ class PMA(MessagePassing):
         # propagate_type: (x: OptPairTensor, alpha: OptPairTensor)
 #         ipdb.set_trace()
         out = self.propagate(edge_index, x=x_V,
-                             alpha=alpha_r, aggr=self.aggr)
+                             alpha=alpha_r)
 
         alpha = self._alpha
         self._alpha = None
@@ -177,21 +182,9 @@ class PMA(MessagePassing):
         return x_j * alpha.unsqueeze(-1)
 
     def aggregate(self, inputs, index,
-                  dim_size=None, aggr=None):
-        r"""Aggregates messages from neighbors as
-        :math:`\square_{j \in \mathcal{N}(i)}`.
-
-        Takes in the output of message computation as first argument and any
-        argument which was initially passed to :meth:`propagate`.
-
-        By default, this function will delegate its call to scatter functions
-        that support "add", "mean" and "max" operations as specified in
-        :meth:`__init__` by the :obj:`aggr` argument.
-        """
-#         ipdb.set_trace()
-        if aggr is None:
-            raise ValeuError("aggr was not passed!")
-        return scatter(inputs, index, dim=self.node_dim, reduce=aggr)
+                  ptr=None, dim_size=None):
+        """Aggregate messages using scatter with the configured reduce operation."""
+        return scatter(inputs, index, dim=self.node_dim, reduce=self.aggr)
 
     def __repr__(self):
         return '{}({}, {}, heads={})'.format(self.__class__.__name__,
@@ -630,29 +623,19 @@ class HalfNLHconv(MessagePassing):
         else:
             x = F.relu(self.f_enc(x))
             x = F.dropout(x, p=self.dropout, training=self.training)
-            x = self.propagate(edge_index, x=x, norm=norm, aggr=aggr)
+            self._current_aggr = aggr  # Store for aggregate method
+            x = self.propagate(edge_index, x=x, norm=norm)
             x = F.relu(self.f_dec(x))
-            
+
         return x
 
     def message(self, x_j, norm):
         return norm.view(-1, 1) * x_j
 
     def aggregate(self, inputs, index,
-                  dim_size=None, aggr=None):
-        r"""Aggregates messages from neighbors as
-        :math:`\square_{j \in \mathcal{N}(i)}`.
-
-        Takes in the output of message computation as first argument and any
-        argument which was initially passed to :meth:`propagate`.
-
-        By default, this function will delegate its call to scatter functions
-        that support "add", "mean" and "max" operations as specified in
-        :meth:`__init__` by the :obj:`aggr` argument.
-        """
-#         ipdb.set_trace()
-        if aggr is None:
-            raise ValeuError("aggr was not passed!")
+                  ptr=None, dim_size=None):
+        """Aggregate messages using scatter with the stored reduce operation."""
+        aggr = getattr(self, '_current_aggr', 'add')
         return scatter(inputs, index, dim=self.node_dim, reduce=aggr)
 
 

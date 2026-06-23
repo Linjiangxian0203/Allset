@@ -11,7 +11,10 @@ import argparse
 import numpy as np
 import os.path as osp
 import scipy.sparse as sp
-import torch_sparse
+try:
+    import torch_sparse
+except (ImportError, OSError):
+    torch_sparse = None
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -403,7 +406,10 @@ if __name__ == '__main__':
         V, E = V.to(device), E.to(device)
 
         degV = torch.from_numpy(data.edge_index.sum(1)).view(-1, 1).float().to(device)
-        from torch_scatter import scatter
+        try:
+            from torch_scatter import scatter
+        except (ImportError, OSError):
+            from torch_geometric.utils import scatter
         degE = scatter(degV[V], E, dim=0, reduce='mean')
         degE = degE.pow(-0.5)
         degV = degV.pow(-0.5)

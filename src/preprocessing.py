@@ -16,7 +16,12 @@ import numpy as np
 
 from collections import defaultdict, Counter
 from itertools import combinations
-from torch_scatter import scatter_add, scatter
+try:
+    from torch_scatter import scatter_add, scatter
+except (ImportError, OSError):
+    from torch_geometric.utils import scatter
+    def scatter_add(src, index, dim=0, dim_size=None):
+        return scatter(src, index, dim=dim, dim_size=dim_size, reduce='sum')
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 
 def expand_edge_index(data, edge_th=0):
@@ -482,7 +487,7 @@ def rand_train_test_idx(label, train_prop=.5, valid_prop=.25, ignore_negative=Tr
         train_num = int(n * train_prop)
         valid_num = int(n * valid_prop)
 
-        perm = torch.as_tensor(np.random.permutation(n))
+        perm = torch.as_tensor(np.random.permutation(n)).long()
 
         train_indices = perm[:train_num]
         val_indices = perm[train_num:train_num + valid_num]

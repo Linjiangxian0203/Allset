@@ -21,7 +21,10 @@ from layers import *
 
 import math 
 
-from torch_scatter import scatter
+try:
+    from torch_scatter import scatter
+except (ImportError, OSError):
+    from torch_geometric.utils import scatter
 from torch_geometric.utils import softmax
 
 #  This part is for HyperGCN
